@@ -1,0 +1,28 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="fill_parent"
+    android:layout_height="fill_parent"
+    android:orientation="vertical">
+    <TextView
+        android:id="@+id/text_record"
+        android:layout_width="fill_parent"
+        android:layout_height="wrap_content"
+        android:text="@string/record"/>
+    <Button
+        android:id="@+id/start_record"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:onClick="onClickRecord"
+        android:text="@string/startRecord"/>
+    <TextView
+        android:id="@+id/text_playback"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/playback"/>
+    <Button
+        android:id="@+id/start_playback"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:onClick="onClickPlayBack"
+        android:text="@string/startPlay"/>
+
+</LinearLayout>

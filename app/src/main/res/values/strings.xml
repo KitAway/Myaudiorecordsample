@@ -1,0 +1,10 @@
+<resources>
+    <string name="app_name">My audio record sample</string>
+
+    <string name="hello_world">Hello world!</string>
+    <string name="action_settings">Settings</string>
+    <string name="record">Press to start recording.</string>
+    <string name="playback">Press to start playback.</string>
+    <string name="startRecord">Start</string>
+    <string name="startPlay">Start</string>
+</resources>
