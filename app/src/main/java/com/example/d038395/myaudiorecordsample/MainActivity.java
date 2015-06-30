@@ -4,9 +4,9 @@ import android.media.MediaPlayer;
 import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Environment;
-import android.provider.MediaStore;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
+import android.text.method.ScrollingMovementMethod;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -14,10 +14,10 @@ import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 
-import org.apache.http.client.methods.HttpPost;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.io.BufferedReader;
-import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Iterator;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 
@@ -39,8 +40,8 @@ public class MainActivity extends ActionBarActivity {
     static MediaPlayer mPlayer=null;
     static final String LOG_TAG = "AudioRecordTest";
     static final String filename="audio_record_test.mp4";
-    static final String targetURL="http://denethor.cdsdom.polito.it:9999";
 
+    static final String targetURL="http://denethor.cdsdom.polito.it:9999";
     static HttpURLConnection httpConn=null;
 
     public MainActivity(){
@@ -52,6 +53,8 @@ public class MainActivity extends ActionBarActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        TextView textView = (TextView) findViewById(R.id.text_result);
+        textView.setMovementMethod(new ScrollingMovementMethod());
     }
 
     @Override
@@ -76,17 +79,25 @@ public class MainActivity extends ActionBarActivity {
         return super.onOptionsItemSelected(item);
     }
     public void onClickRecord(View view) {
-        Button button=(Button)findViewById(R.id.start_record);
+        Button btn_record=(Button)findViewById(R.id.start_record);
+        Button btn_playback = (Button) findViewById(R.id.start_playback);
+        Button btn_send=(Button) findViewById(R.id.send_server);
         TextView textView=(TextView)findViewById(R.id.text_record);
+        ((TextView) findViewById(R.id.text_result)).setText(R.string.hello_world);
+
         if (wRecord) {
             mRecorder.stop();
             mRecorder.release();
             mRecorder = null;
-            button.setText(R.string.startRecord);
+            btn_record.setText(R.string.startRecord);
             textView.setText(R.string.record);
             wRecord =!wRecord;
+            btn_playback.setEnabled(true);
+            btn_send.setEnabled(true);
         }
         else {
+            btn_playback.setEnabled(false);
+            btn_send.setEnabled(false);
             mRecorder = new MediaRecorder();
             mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
             mRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
@@ -101,11 +112,87 @@ public class MainActivity extends ActionBarActivity {
 
             mRecorder.start();
 
-            button.setText("Stop");
+            btn_record.setText("Stop");
             textView.setText("Recording, press to stop.");
 
             wRecord =!wRecord;
         }
+    }
+
+    public void onClickPlayBack(View view) {
+        final Button btn_playback=(Button) findViewById(R.id.start_playback);
+        final Button btn_record=(Button)findViewById(R.id.start_record);
+        final Button btn_send=(Button) findViewById(R.id.send_server);
+        final TextView textView = (TextView) findViewById(R.id.text_playback);
+        if (wPlayback) {
+            mPlayer.release();
+            mPlayer = null;
+            btn_playback.setText(R.string.startPlay);
+            textView.setText(R.string.playback);
+            wPlayback =!wPlayback;
+            btn_send.setEnabled(true);
+            btn_record.setEnabled(true);
+        }
+        else {
+            btn_send.setEnabled(false);
+            btn_record.setEnabled(false);
+            mPlayer = new MediaPlayer();
+            mPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) {
+                    mPlayer.release();
+                    mPlayer = null;
+                    btn_playback.setText(R.string.startPlay);
+                    textView.setText(R.string.playback);
+                    wPlayback =!wPlayback;
+                    btn_send.setEnabled(true);
+                    btn_record.setEnabled(true);
+                }
+            });
+            try {
+                mPlayer.setDataSource(mFileName);
+                mPlayer.prepare();
+                mPlayer.start();
+            } catch (IOException e) {
+                Log.e(LOG_TAG, "prepare() failed");
+                return;
+            }
+            btn_playback.setText("Stop");
+            textView.setText("Press to stop playing.");
+            wPlayback =!wPlayback;
+        }
+    }
+    public void onClickSend(View view) throws IOException, ExecutionException, InterruptedException{
+        Button btn_playback=(Button) findViewById(R.id.start_playback);
+        Button btn_record=(Button)findViewById(R.id.start_record);
+        Button btn_send=(Button) findViewById(R.id.send_server);
+        btn_playback.setEnabled(false);
+        btn_record.setEnabled(false);
+        btn_send.setEnabled(false);
+        TextView textView = (TextView)findViewById(R.id.text_result);
+        textView.setText(R.string.hello_world);
+
+        UUID uuid=UUID.randomUUID();
+        File file= new File(mFileName);
+        long fileLength=file.length();
+        FileInputStream fis = new FileInputStream(file);
+        final byte[] buffer= new byte[(int)fileLength];
+        try{
+            fis.read(buffer);
+            URL url= new URL(targetURL);
+            myParas mp=new myParas(url,uuid,buffer);
+            taskExecute pm=new taskExecute();
+            textView.setText(pm.execute(mp).get());
+        }
+        finally {
+            if(httpConn!=null)httpConn.disconnect();
+            fis.close();
+            btn_playback.setEnabled(true);
+            btn_record.setEnabled(true);
+            btn_send.setEnabled(true);
+            btn_send.setText(R.string.send);
+        }
+
     }
 
     private static class myParas{
@@ -119,10 +206,14 @@ public class MainActivity extends ActionBarActivity {
             this.buffer=buffer;
         }
     }
-    private class taskExcute extends AsyncTask<myParas, Void, String> {
+
+    private class taskExecute extends AsyncTask<myParas, Void, String> {
         protected String doInBackground(myParas... params) {
             try {
                 //Your code goes here
+                /*
+                post data
+                 */
                 URL url=params[0].url;
                 byte[] buffer=params[0].buffer;
                 UUID uuid=params[0].uuid;
@@ -130,7 +221,8 @@ public class MainActivity extends ActionBarActivity {
                 httpConn.setRequestMethod("POST");
                 httpConn.setRequestProperty("id", uuid.toString());
                 httpConn.setRequestProperty("audioname", filename);
-                httpConn.setRequestProperty("portBias", "0");
+                httpConn.setRequestProperty("portBias",
+                        Integer.toString(Character.getNumericValue(uuid.toString().charAt(0))));
                 httpConn.setUseCaches(false);
                 httpConn.setDoInput(true);
                 httpConn.setDoOutput(true);
@@ -147,57 +239,76 @@ public class MainActivity extends ActionBarActivity {
                     response.append('\r');
                 }
                 rd.close();
-                return response.toString();
+
+                /*
+                Get data
+                 */
+                boolean loopGetResult=false;
+                if (httpConn.getResponseCode() == httpConn.HTTP_OK) {
+                    loopGetResult=true;
+                }
+                httpConn.disconnect();
+                while (loopGetResult) {
+                    String getURL=targetURL+"/status/"+uuid.toString();
+                    url= new URL(getURL);
+                    httpConn=(HttpURLConnection)url.openConnection();
+                    httpConn.setRequestProperty("portBias",
+                            Integer.toString(Character.getNumericValue(uuid.toString().charAt(0))));
+                    is=httpConn.getInputStream();
+                    rd = new BufferedReader(new InputStreamReader(is));
+                    response = new StringBuilder();
+                    while((line=rd.readLine())!=null) {
+                        response.append(line);
+                        response.append('\r');
+                    }
+                    rd.close();
+                    JSONObject jsObj= new JSONObject(response.toString());
+                    String status=jsObj.getString("status");
+                    switch (status) {
+                        case "TRANSCRIBED":
+                            return "Result:\n"+readJson(jsObj);
+                        case "FAILED":
+                            return "!!!TRANSCRIBING FAILED!!!";
+                        case "QUEUED":
+                        case "TRANSCRIBING":
+                            Thread.sleep(1000);
+                            break;
+                        default:
+                            return "!!!UNKNOWN ERROR!!!";
+                    }
+
+                }
             } catch (Exception e) {
                 e.printStackTrace();
             }
             return null;
         }
-    }
 
-    public void onClickPlayBack(View view) {
-        Button button=(Button) findViewById(R.id.start_playback);
-        TextView textView = (TextView) findViewById(R.id.text_playback);
-        if (wPlayback) {
-            mPlayer.release();
-            mPlayer = null;
-            button.setText(R.string.startPlay);
-            textView.setText(R.string.playback);
-            wPlayback =!wPlayback;
-        }
-        else {
-            mPlayer = new MediaPlayer();
+
+        private String readJson(JSONObject jsObj) {
+            JSONObject jsBlock;
+            String key;
+            StringBuffer sBuffer=new StringBuffer();
             try {
-                mPlayer.setDataSource(mFileName);
-                mPlayer.prepare();
-                mPlayer.start();
-            } catch (IOException e) {
-                Log.e(LOG_TAG, "prepare() failed");
-                return;
+                JSONObject js=jsObj.getJSONObject("channels").
+                        getJSONObject("firstChannelLabel").
+                        getJSONObject("lattice").getJSONObject("1").
+                        getJSONObject("links");
+                Iterator<?> keys = js.keys();
+                while (keys.hasNext()) {
+                    key=(String)keys.next();
+                    jsBlock=js.getJSONObject(key);
+                    if (jsBlock.getBoolean("best_path")) {
+                        key=jsBlock.getString("word");
+                        if (key.charAt(0)=='!')
+                            continue;
+                        sBuffer.append(key + ' ');
+                    }
+                }
+            } catch (JSONException e) {
+                Log.e("error","caused by json.");
             }
-            button.setText("Stop");
-            textView.setText("Press to stop playing.");
-            wPlayback =!wPlayback;
+            return sBuffer.toString();
         }
-    }
-    public void onClickSend(View view) throws IOException, ExecutionException, InterruptedException{
-        final TextView textView = (TextView)findViewById(R.id.text_result);
-        UUID uuid=UUID.randomUUID();
-        File file= new File(mFileName);
-        long fileLength=file.length();
-        FileInputStream fis = new FileInputStream(file);
-        final byte[] buffer= new byte[(int)fileLength];
-        try{
-            fis.read(buffer);
-            URL url= new URL(targetURL);
-            myParas mp=new myParas(url,uuid,buffer);
-            taskExcute pm=new taskExcute();
-            textView.setText(pm.execute(mp).get());
-        }
-        finally {
-            if(httpConn!=null)httpConn.disconnect();
-            fis.close();
-        }
-
     }
 }
