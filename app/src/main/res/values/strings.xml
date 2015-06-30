@@ -7,4 +7,5 @@
     <string name="playback">Press to start playback.</string>
     <string name="startRecord">Start</string>
     <string name="startPlay">Start</string>
+    <string name="send">Send</string>
 </resources>
