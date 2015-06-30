@@ -89,7 +89,7 @@ public class MainActivity extends ActionBarActivity {
             mRecorder.stop();
             mRecorder.release();
             mRecorder = null;
-            btn_record.setText(R.string.startRecord);
+            btn_record.setText(R.string.start);
             textView.setText(R.string.record);
             wRecord =!wRecord;
             btn_playback.setEnabled(true);
@@ -112,8 +112,8 @@ public class MainActivity extends ActionBarActivity {
 
             mRecorder.start();
 
-            btn_record.setText("Stop");
-            textView.setText("Recording, press to stop.");
+            btn_record.setText(R.string.stop);
+            textView.setText(R.string.recording);
 
             wRecord =!wRecord;
         }
@@ -127,7 +127,7 @@ public class MainActivity extends ActionBarActivity {
         if (wPlayback) {
             mPlayer.release();
             mPlayer = null;
-            btn_playback.setText(R.string.startPlay);
+            btn_playback.setText(R.string.start);
             textView.setText(R.string.playback);
             wPlayback =!wPlayback;
             btn_send.setEnabled(true);
@@ -142,7 +142,7 @@ public class MainActivity extends ActionBarActivity {
                 public void onCompletion(MediaPlayer mp) {
                     mPlayer.release();
                     mPlayer = null;
-                    btn_playback.setText(R.string.startPlay);
+                    btn_playback.setText(R.string.stop);
                     textView.setText(R.string.playback);
                     wPlayback =!wPlayback;
                     btn_send.setEnabled(true);
@@ -157,20 +157,18 @@ public class MainActivity extends ActionBarActivity {
                 Log.e(LOG_TAG, "prepare() failed");
                 return;
             }
-            btn_playback.setText("Stop");
-            textView.setText("Press to stop playing.");
+            btn_playback.setText(R.string.stop);
+            textView.setText(R.string.playing);
             wPlayback =!wPlayback;
         }
     }
     public void onClickSend(View view) throws IOException, ExecutionException, InterruptedException{
-        Button btn_playback=(Button) findViewById(R.id.start_playback);
-        Button btn_record=(Button)findViewById(R.id.start_record);
-        Button btn_send=(Button) findViewById(R.id.send_server);
-        btn_playback.setEnabled(false);
-        btn_record.setEnabled(false);
-        btn_send.setEnabled(false);
-        TextView textView = (TextView)findViewById(R.id.text_result);
-        textView.setText(R.string.hello_world);
+        findViewById(R.id.start_playback).setEnabled(false);
+        findViewById(R.id.start_record).setEnabled(false);
+        findViewById(R.id.send_server).setEnabled(false);
+        ((Button)findViewById(R.id.send_server)).setText(R.string.wait);
+        ((TextView)findViewById(R.id.text_result)).setText(R.string.hello_world);
+
 
         UUID uuid=UUID.randomUUID();
         File file= new File(mFileName);
@@ -181,16 +179,11 @@ public class MainActivity extends ActionBarActivity {
             fis.read(buffer);
             URL url= new URL(targetURL);
             myParas mp=new myParas(url,uuid,buffer);
-            taskExecute pm=new taskExecute();
-            textView.setText(pm.execute(mp).get());
+            new taskExecute().execute(mp);
         }
         finally {
             if(httpConn!=null)httpConn.disconnect();
             fis.close();
-            btn_playback.setEnabled(true);
-            btn_record.setEnabled(true);
-            btn_send.setEnabled(true);
-            btn_send.setText(R.string.send);
         }
 
     }
@@ -209,6 +202,7 @@ public class MainActivity extends ActionBarActivity {
 
     private class taskExecute extends AsyncTask<myParas, Void, String> {
         protected String doInBackground(myParas... params) {
+            String result="Result:\n";
             try {
                 //Your code goes here
                 /*
@@ -266,22 +260,32 @@ public class MainActivity extends ActionBarActivity {
                     String status=jsObj.getString("status");
                     switch (status) {
                         case "TRANSCRIBED":
-                            return "Result:\n"+readJson(jsObj);
+                            result+=readJson(jsObj);
+                            return result;
                         case "FAILED":
-                            return "!!!TRANSCRIBING FAILED!!!";
+                            result+= "!!!TRANSCRIBING FAILED!!!";
+                            return result;
                         case "QUEUED":
                         case "TRANSCRIBING":
                             Thread.sleep(1000);
                             break;
                         default:
-                            return "!!!UNKNOWN ERROR!!!";
+                            result+= "!!!UNKNOWN ERROR!!!";
+                            return result;
                     }
-
                 }
             } catch (Exception e) {
-                e.printStackTrace();
+                result+="!!!EXCEPTION!!!"+e.toString();
             }
-            return null;
+            return result;
+        }
+
+        protected void onPostExecute(String result) {
+            findViewById(R.id.start_playback).setEnabled(true);
+            findViewById(R.id.start_record).setEnabled(true);
+            findViewById(R.id.send_server).setEnabled(true);
+            ((TextView)findViewById(R.id.text_result)).setText(result);
+            ((Button)findViewById(R.id.send_server)).setText(R.string.send);
         }
 
 

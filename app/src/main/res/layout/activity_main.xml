@@ -12,7 +12,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:onClick="onClickRecord"
-        android:text="@string/startRecord"/>
+        android:text="@string/start"/>
     <TextView
         android:id="@+id/text_playback"
         android:layout_width="wrap_content"
@@ -23,7 +23,11 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:onClick="onClickPlayBack"
-        android:text="@string/startPlay"/>
+        android:text="@string/stop"/>
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="@string/click_result"/>
     <Button
         android:id="@+id/send_server"
         android:layout_width="wrap_content"
