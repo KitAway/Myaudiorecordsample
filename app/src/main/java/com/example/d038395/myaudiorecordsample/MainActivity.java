@@ -2,6 +2,7 @@ package com.example.d038395.myaudiorecordsample;
 
 import android.media.MediaPlayer;
 import android.media.MediaRecorder;
+import android.os.AsyncTask;
 import android.os.Environment;
 import android.provider.MediaStore;
 import android.support.v7.app.ActionBarActivity;
@@ -26,6 +27,7 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 
 
 public class MainActivity extends ActionBarActivity {
@@ -105,6 +107,54 @@ public class MainActivity extends ActionBarActivity {
             wRecord =!wRecord;
         }
     }
+
+    private static class myParas{
+        URL url;
+        UUID uuid;
+        byte [] buffer;
+
+        myParas(URL url,UUID uuid,byte buffer[]){
+            this.url=url;
+            this.uuid=uuid;
+            this.buffer=buffer;
+        }
+    }
+    private class taskExcute extends AsyncTask<myParas, Void, String> {
+        protected String doInBackground(myParas... params) {
+            try {
+                //Your code goes here
+                URL url=params[0].url;
+                byte[] buffer=params[0].buffer;
+                UUID uuid=params[0].uuid;
+                httpConn=(HttpURLConnection)url.openConnection();
+                httpConn.setRequestMethod("POST");
+                httpConn.setRequestProperty("id", uuid.toString());
+                httpConn.setRequestProperty("audioname", filename);
+                httpConn.setRequestProperty("portBias", "0");
+                httpConn.setUseCaches(false);
+                httpConn.setDoInput(true);
+                httpConn.setDoOutput(true);
+                DataOutputStream wr =new DataOutputStream(httpConn.getOutputStream());
+                wr.write(buffer);
+                wr.close();
+
+                InputStream is =httpConn.getInputStream();
+                BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+                StringBuilder response = new StringBuilder();
+                String line;
+                while((line=rd.readLine())!=null) {
+                    response.append(line);
+                    response.append('\r');
+                }
+                rd.close();
+                return response.toString();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+            return null;
+        }
+    }
+
     public void onClickPlayBack(View view) {
         Button button=(Button) findViewById(R.id.start_playback);
         TextView textView = (TextView) findViewById(R.id.text_playback);
@@ -130,7 +180,7 @@ public class MainActivity extends ActionBarActivity {
             wPlayback =!wPlayback;
         }
     }
-    public void onClickSend(View view) throws IOException{
+    public void onClickSend(View view) throws IOException, ExecutionException, InterruptedException{
         final TextView textView = (TextView)findViewById(R.id.text_result);
         UUID uuid=UUID.randomUUID();
         File file= new File(mFileName);
@@ -140,41 +190,9 @@ public class MainActivity extends ActionBarActivity {
         try{
             fis.read(buffer);
             URL url= new URL(targetURL);
-            httpConn=(HttpURLConnection)url.openConnection();
-            httpConn.setRequestMethod("POST");
-            httpConn.setRequestProperty("id", uuid.toString());
-            httpConn.setRequestProperty("audioname",filename);
-            httpConn.setRequestProperty("portBias", "0");
-            httpConn.setUseCaches(false);
-            httpConn.setDoInput(true);
-            httpConn.setDoOutput(true);
-            Thread thread = new Thread(new Runnable(){
-                @Override
-                public void run() {
-                    try {
-                        //Your code goes here
-                        DataOutputStream wr =new DataOutputStream(httpConn.getOutputStream());
-                        wr.write(buffer);
-                        wr.close();
-
-                        InputStream is =httpConn.getInputStream();
-                        BufferedReader rd = new BufferedReader(new InputStreamReader(is));
-                        StringBuilder response = new StringBuilder();
-                        String line;
-                        while((line=rd.readLine())!=null) {
-                            response.append(line);
-                            response.append('\r');
-                        }
-                        rd.close();
-                        textView.setText(response.toString());
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            });
-
-            thread.start();
-
+            myParas mp=new myParas(url,uuid,buffer);
+            taskExcute pm=new taskExcute();
+            textView.setText(pm.execute(mp).get());
         }
         finally {
             if(httpConn!=null)httpConn.disconnect();
