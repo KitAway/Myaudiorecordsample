@@ -12,6 +12,7 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ProgressBar;
 import android.widget.TextView;
 
 import org.json.JSONException;
@@ -36,13 +37,16 @@ public class MainActivity extends ActionBarActivity {
     static boolean wRecord =false;
     static boolean wPlayback =false;
     static String mFileName = null;
+    static int audioLength=0;
     static MediaRecorder mRecorder=null;
     static MediaPlayer mPlayer=null;
     static final String LOG_TAG = "AudioRecordTest";
-    static final String filename="audio_record_test.mp4";
+    static final String filename="audio_record_test.3gp";
 
     static final String targetURL="http://denethor.cdsdom.polito.it:9999";
     static HttpURLConnection httpConn=null;
+
+    static final float progressMax=100;
 
     public MainActivity(){
         super();
@@ -55,6 +59,7 @@ public class MainActivity extends ActionBarActivity {
         setContentView(R.layout.activity_main);
         TextView textView = (TextView) findViewById(R.id.text_result);
         textView.setMovementMethod(new ScrollingMovementMethod());
+        ((ProgressBar)findViewById(R.id.progress_bar)).setMax((int)progressMax);
     }
 
     @Override
@@ -96,29 +101,50 @@ public class MainActivity extends ActionBarActivity {
             btn_send.setEnabled(true);
         }
         else {
-            btn_playback.setEnabled(false);
-            btn_send.setEnabled(false);
-            mRecorder = new MediaRecorder();
-            mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            mRecorder.setOutputFormat(MediaRecorder.OutputFormat.MPEG_4);
-            mRecorder.setOutputFile(mFileName);
-            mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
-            try {
-                mRecorder.prepare();
-            } catch (IOException e) {
-                Log.e(LOG_TAG, "prepare() failed");
-                return;
-            }
-
-            mRecorder.start();
-
+            new taskTimer().execute();
             btn_record.setText(R.string.stop);
             textView.setText(R.string.recording);
-
+            btn_playback.setEnabled(false);
+            btn_send.setEnabled(false);
             wRecord =!wRecord;
         }
     }
 
+    private class taskTimer extends AsyncTask<Void, Integer,Void>{
+        protected Void doInBackground(Void... urls) {
+            int timer=0;
+            mRecorder = new MediaRecorder();
+            mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+            mRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
+            mRecorder.setOutputFile(mFileName);
+            mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.AMR_NB);
+            mRecorder.setAudioChannels(1);
+            try {
+                mRecorder.prepare();
+                mRecorder.start();
+                while(wRecord) {
+                    timer++;
+                    publishProgress(timer);
+                    Thread.sleep(1000);
+                }
+            } catch (IOException e) {
+                Log.e(LOG_TAG, "prepare() failed");
+            } catch (InterruptedException e) {
+                Log.e(LOG_TAG,"Timer interrupted");
+            }
+            return null;
+        }
+
+        protected void onProgressUpdate(Integer... progress) {
+            audioLength=progress[0];
+            int sec,min;
+            sec=audioLength%60;
+            min=audioLength/60;
+            ((TextView) findViewById(R.id.text_time)).
+                    setText(String.format("%d:%02d",min,sec));
+        }
+
+    }
     public void onClickPlayBack(View view) {
         final Button btn_playback=(Button) findViewById(R.id.start_playback);
         final Button btn_record=(Button)findViewById(R.id.start_record);
@@ -134,15 +160,13 @@ public class MainActivity extends ActionBarActivity {
             btn_record.setEnabled(true);
         }
         else {
-            btn_send.setEnabled(false);
-            btn_record.setEnabled(false);
             mPlayer = new MediaPlayer();
             mPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
                 public void onCompletion(MediaPlayer mp) {
                     mPlayer.release();
                     mPlayer = null;
-                    btn_playback.setText(R.string.stop);
+                    btn_playback.setText(R.string.start);
                     textView.setText(R.string.playback);
                     wPlayback =!wPlayback;
                     btn_send.setEnabled(true);
@@ -153,38 +177,36 @@ public class MainActivity extends ActionBarActivity {
                 mPlayer.setDataSource(mFileName);
                 mPlayer.prepare();
                 mPlayer.start();
+                btn_send.setEnabled(false);
+                btn_record.setEnabled(false);
+                btn_playback.setText(R.string.stop);
+                textView.setText(R.string.playing);
+                wPlayback =!wPlayback;
             } catch (IOException e) {
                 Log.e(LOG_TAG, "prepare() failed");
-                return;
             }
-            btn_playback.setText(R.string.stop);
-            textView.setText(R.string.playing);
-            wPlayback =!wPlayback;
         }
     }
-    public void onClickSend(View view) throws IOException, ExecutionException, InterruptedException{
-        findViewById(R.id.start_playback).setEnabled(false);
-        findViewById(R.id.start_record).setEnabled(false);
-        findViewById(R.id.send_server).setEnabled(false);
-        ((Button)findViewById(R.id.send_server)).setText(R.string.wait);
-        ((TextView)findViewById(R.id.text_result)).setText(R.string.hello_world);
+    public void onClickSend(View view) throws IOException, InterruptedException{
 
-
+        if (audioLength==0) {
+            ((TextView)findViewById(R.id.text_result)).setText("Please record your voice first.");
+            return;
+        }
         UUID uuid=UUID.randomUUID();
         File file= new File(mFileName);
         long fileLength=file.length();
         FileInputStream fis = new FileInputStream(file);
         final byte[] buffer= new byte[(int)fileLength];
-        try{
-            fis.read(buffer);
-            URL url= new URL(targetURL);
-            myParas mp=new myParas(url,uuid,buffer);
-            new taskExecute().execute(mp);
-        }
-        finally {
-            if(httpConn!=null)httpConn.disconnect();
-            fis.close();
-        }
+        fis.read(buffer);
+        URL url= new URL(targetURL);
+        myParas mp=new myParas(url,uuid,buffer);
+        new taskExecute().execute(mp);
+        findViewById(R.id.start_playback).setEnabled(false);
+        findViewById(R.id.start_record).setEnabled(false);
+        findViewById(R.id.send_server).setEnabled(false);
+        ((Button)findViewById(R.id.send_server)).setText(R.string.wait);
+        ((TextView)findViewById(R.id.text_result)).setText(R.string.hello_world);
 
     }
 
@@ -200,8 +222,11 @@ public class MainActivity extends ActionBarActivity {
         }
     }
 
-    private class taskExecute extends AsyncTask<myParas, Void, String> {
+
+    private class taskExecute extends AsyncTask<myParas, Float, String> {
         protected String doInBackground(myParas... params) {
+            float progress=0;
+            float progPerSec=progressMax/2/audioLength;
             String result="Result:\n";
             try {
                 //Your code goes here
@@ -212,6 +237,7 @@ public class MainActivity extends ActionBarActivity {
                 byte[] buffer=params[0].buffer;
                 UUID uuid=params[0].uuid;
                 httpConn=(HttpURLConnection)url.openConnection();
+                httpConn.setConnectTimeout(7000);
                 httpConn.setRequestMethod("POST");
                 httpConn.setRequestProperty("id", uuid.toString());
                 httpConn.setRequestProperty("audioname", filename);
@@ -224,6 +250,9 @@ public class MainActivity extends ActionBarActivity {
                 wr.write(buffer);
                 wr.close();
 
+                progress+=progressMax/10;
+                publishProgress(progress);
+
                 InputStream is =httpConn.getInputStream();
                 BufferedReader rd = new BufferedReader(new InputStreamReader(is));
                 StringBuilder response = new StringBuilder();
@@ -234,17 +263,21 @@ public class MainActivity extends ActionBarActivity {
                 }
                 rd.close();
 
+                progress+=progressMax/10;
+                publishProgress(progress);
+
                 /*
                 Get data
                  */
                 boolean loopGetResult=false;
                 if (httpConn.getResponseCode() == httpConn.HTTP_OK) {
                     loopGetResult=true;
-                }
-                httpConn.disconnect();
-                while (loopGetResult) {
+                    httpConn.disconnect();
                     String getURL=targetURL+"/status/"+uuid.toString();
                     url= new URL(getURL);
+                }
+
+                while (loopGetResult) {
                     httpConn=(HttpURLConnection)url.openConnection();
                     httpConn.setRequestProperty("portBias",
                             Integer.toString(Character.getNumericValue(uuid.toString().charAt(0))));
@@ -261,23 +294,42 @@ public class MainActivity extends ActionBarActivity {
                     switch (status) {
                         case "TRANSCRIBED":
                             result+=readJson(jsObj);
+                            progress=progressMax;
+                            publishProgress(progress);
                             return result;
                         case "FAILED":
                             result+= "!!!TRANSCRIBING FAILED!!!";
+                            progress=progressMax;
+                            publishProgress(progress);
                             return result;
                         case "QUEUED":
                         case "TRANSCRIBING":
+                            if (progress<progressMax-progPerSec)
+                                progress+=progPerSec;
+                            publishProgress(progress);
                             Thread.sleep(1000);
                             break;
                         default:
                             result+= "!!!UNKNOWN ERROR!!!";
+                            progress=progressMax;
+                            publishProgress(progress);
                             return result;
                     }
                 }
             } catch (Exception e) {
                 result+="!!!EXCEPTION!!!"+e.toString();
+                if(httpConn!=null){
+                    httpConn.disconnect();
+                    httpConn=null;
+                }
             }
             return result;
+        }
+
+        protected void onProgressUpdate(Float... progress) {
+            ProgressBar proBar=(ProgressBar) findViewById(R.id.progress_bar);
+            int i=(int)(float)progress[0];
+            proBar.setProgress(i);
         }
 
         protected void onPostExecute(String result) {
